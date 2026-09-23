@@ -67,7 +67,11 @@ export function createSnapshot(tables, generatedAt = new Date().toISOString()) {
   const universes = lookup(tables.Universe, 'Universe');
   const itemById = new Map();
   const itemByInventory = new Map();
-  const items = tables.CatalogItem.map(row => {
+  // Older static runs stored unnamed emotes. New ingestion skips them, but
+  // the existing rows remain in Supabase until they are removed separately.
+  const catalogRows = tables.CatalogItem.filter(row =>
+    !(row.ItemType === 3 && typeof row.Name === 'string' && row.Name.trim().length === 0));
+  const items = catalogRows.map(row => {
     const type = resolve(types, row.ItemType, 'item.type');
     const champion = row.ChampionID === null ? null : resolve(champions, row.ChampionID, 'item.champion');
     const skinline = row.SkinlineID === null ? null : resolve(skinlines, row.SkinlineID, 'item.skinline');

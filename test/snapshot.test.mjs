@@ -25,6 +25,21 @@ test('builds normalized items and all rotation contracts from public HTTP reads'
   assert.doesNotMatch(JSON.stringify(snapshot), /IsActive|HubEnabled|CreatedAt|SortSection|PrimaryItemID|IncludedItems|SaleID/);
 });
 
+test('omits legacy unnamed emotes while retaining named emotes', () => {
+  const tables = rows();
+  tables.CatalogItem.push(
+    { ItemID: uuid(4), RiotItemID: 4004, ItemType: 3, Name: '  ', ImageURL: null, ParentItemID: uuid(4), ChampionID: null, SkinlineID: null },
+    { ItemID: uuid(5), RiotItemID: 4005, ItemType: 3, Name: 'Named Emote', ImageURL: null, ParentItemID: uuid(5), ChampionID: null, SkinlineID: null },
+  );
+  const snapshot = createSnapshot(tables);
+  validateSnapshot(snapshot);
+  assert.equal(snapshot.items.some(item => item.itemId === uuid(4)), false);
+  assert.equal(snapshot.items.some(item => item.itemId === uuid(5)), true);
+
+  tables.CatalogItem[0].Name = '  ';
+  assert.throws(() => validateSnapshot(createSnapshot(tables)), /item.name/);
+});
+
 test('snapshot hash excludes its own digest and includes generatedAt', () => {
   const snapshot = fixtureSnapshot();
   const { snapshotId, ...candidate } = snapshot;
