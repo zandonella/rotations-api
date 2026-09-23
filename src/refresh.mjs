@@ -4,6 +4,13 @@ import { validateSnapshot } from './validate.mjs';
 import { persistSnapshot, readSnapshot } from './persistence.mjs';
 import { log, logFailure } from './log.mjs';
 
+const REFRESH_OFFSET_MS = 5 * 60_000;
+
+export function nextRefreshDelay(nowMs, intervalMs) {
+  const nextSlot = Math.floor((nowMs - REFRESH_OFFSET_MS) / intervalMs + 1) * intervalMs + REFRESH_OFFSET_MS;
+  return nextSlot - nowMs;
+}
+
 export async function createSnapshotStore(config) {
   let current = null;
   let running = null;
@@ -56,19 +63,28 @@ export async function createSnapshotStore(config) {
     })().finally(() => { running = null; });
   }
 
+  function schedulePeriodicRefresh() {
+    if (stopped) return;
+    timer = setTimeout(() => {
+      timer = undefined;
+      requestRefresh('periodic');
+      schedulePeriodicRefresh();
+    }, nextRefreshDelay(Date.now(), config.refreshIntervalMs));
+    timer.unref();
+  }
+
   return {
     get current() { return current; },
     requestRefresh,
     start() {
       if (timer || stopped) return;
       requestRefresh('startup');
-      timer = setInterval(() => requestRefresh('periodic'), config.refreshIntervalMs);
-      timer.unref();
+      schedulePeriodicRefresh();
     },
     async whenIdle() { await running; },
     async close() {
       stopped = true;
-      clearInterval(timer);
+      clearTimeout(timer);
       await running;
     },
   };

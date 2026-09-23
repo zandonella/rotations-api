@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { open, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createSnapshotStore } from '../src/refresh.mjs';
+import { createSnapshotStore, nextRefreshDelay } from '../src/refresh.mjs';
 import { persistSnapshot, readSnapshot } from '../src/persistence.mjs';
 import { snapshotDigest } from '../src/validate.mjs';
 import { deferred, fixtureSnapshot, mockSupabase, rows, testConfig, uuid } from './fixtures.mjs';
@@ -157,7 +157,18 @@ test('a failed rebuild still runs its pending follow-up and can recover', async 
   assert.ok(store.current);
 });
 
-test('startup serves persisted state during its asynchronous refresh and timer triggers fallback', async t => {
+test('fallback slots occur at five and thirty-five minutes past each hour', () => {
+  const at = (hour, minute, second = 0) => Date.UTC(2026, 8, 22, hour, minute, second);
+  const interval = 30 * 60_000;
+  assert.equal(nextRefreshDelay(at(12, 4, 59), interval), 1000);
+  assert.equal(nextRefreshDelay(at(12, 5), interval), interval);
+  assert.equal(nextRefreshDelay(at(12, 12), interval), 23 * 60_000);
+  assert.equal(nextRefreshDelay(at(12, 34), interval), 60_000);
+  assert.equal(nextRefreshDelay(at(12, 35), interval), interval);
+  assert.equal(nextRefreshDelay(at(12, 59), interval), 6 * 60_000);
+});
+
+test('startup serves persisted state and fallback reschedules on wall-clock slots', async t => {
   const config = await testConfig(t);
   const previous = fixtureSnapshot();
   await persistSnapshot(config.dataDir, previous);
@@ -174,19 +185,25 @@ test('startup serves persisted state during its asynchronous refresh and timer t
     }
     return tables[table];
   });
+  let now = Date.UTC(2026, 8, 22, 12, 2);
+  t.mock.method(Date, 'now', () => now);
   let periodic;
-  t.mock.method(globalThis, 'setInterval', (callback, interval) => {
-    assert.equal(interval, 30 * 60_000);
+  const delays = [];
+  t.mock.method(globalThis, 'setTimeout', (callback, delay) => {
     periodic = callback;
+    delays.push(delay);
     return { unref() {} };
   });
   store.start();
+  assert.deepEqual(delays, [3 * 60_000]);
   await started.promise;
   assert.equal(store.current.snapshot.snapshotId, previous.snapshotId);
   release.resolve();
   await store.whenIdle();
   assert.equal(builds, 1);
+  now = Date.UTC(2026, 8, 22, 12, 5);
   periodic();
   await store.whenIdle();
   assert.equal(builds, 2);
+  assert.deepEqual(delays, [3 * 60_000, 30 * 60_000]);
 });

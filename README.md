@@ -252,7 +252,7 @@ Health returns 200 with a valid snapshot no older than 90 minutes, including the
 
 ## Snapshot and refresh behavior
 
-Startup validates and loads `/app/data/snapshot-v1.json`, reconstructs the item lookup map, begins serving, and starts an asynchronous refresh. Without valid persisted data, public data routes return 503 until a build succeeds. A fallback refresh runs every 30 minutes by default. Scheduling never reads ingestion heartbeat.
+Startup validates and loads `/app/data/snapshot-v1.json`, reconstructs the item lookup map, begins serving, and starts an asynchronous refresh. Without valid persisted data, public data routes return 503 until a build succeeds. By default, fallback refreshes start at 5 and 35 minutes past each UTC hour, regardless of when the service started. Scheduling never reads ingestion heartbeat.
 
 A rebuild reads all required public tables, constructs a separate candidate, validates it, writes a temporary file in the same directory, syncs and closes it, renames it over the saved snapshot, and only then swaps memory. Any failure preserves the previous live snapshot. Only one rebuild executes at a time, with one pending boolean coalescing intervening requests into a follow-up run.
 
@@ -280,7 +280,7 @@ The native server listens on `0.0.0.0`. Missing database credentials allow safe 
 | `API_REFRESH_SECRET` | Empty. | Shared refresh bearer secret. Empty disables hints. |
 | `PORT` | `3000` | Native HTTP port. Compose fixes container port 3000. |
 | `DATA_DIR` | `/app/data` | Snapshot directory. Compose fixes the writable volume path. |
-| `REFRESH_INTERVAL_MINUTES` | `30` | Positive integer, at most 35791 minutes to fit Node timers. |
+| `REFRESH_INTERVAL_MINUTES` | `30` | Positive integer, at most 35791 minutes to fit Node timers. The default runs at `:05` and `:35` UTC. Other intervals repeat from the same fixed UTC anchor, independent of service startup time. |
 | `PUBLIC_RATE_LIMIT_PER_MINUTE` | `60` | Positive safe integer public request limit. |
 | `TRUSTED_PROXY_IPS` | Empty. | Comma-separated exact TCP peer IPs. No CIDR ranges. |
 
