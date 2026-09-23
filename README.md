@@ -100,6 +100,8 @@ type ItemResponse = { meta: Meta; item: Item };
 
 The known item types are 1 Skin, 2 Chroma, 3 Emote, 4 Icon, 5 Finisher, 6 Ward, and 7 Title. Lookup metadata, champion slugs, currencies, and image URLs retain source values. Image URLs can be protocol relative, such as `//wsrv.nl/...`. Cosmetic rarity, tiers, and currency conversion are not invented.
 
+Legacy emote rows with blank names are excluded from snapshots. Static ingestion now skips unnamed emotes, but older rows can remain in Supabase. Other unnamed catalog items still fail validation so source data issues remain visible.
+
 The first three rotation arrays come from `IsActive = true` rows at refresh time. The combined route retains the complete arrays, including large Blue Essence rotations. Collection subroutes page those arrays without additional Supabase reads. Catalog Sales sort by end time and `saleId`. Mythic offers sort by FEATURED, BIWEEKLY, WEEKLY, DAILY, then end time and `offerId`. Sanctum sorts by EXALTED before MYTHIC_VARIANT, then end time and `bannerId`.
 
 `saleId` is `CatalogSale.SaleID`. `offerId` is `MythicSale.OfferID`, and `bannerId` is `SanctumSale.SaleID`. Mythic `SaleID` stays internal. Your Shop uses `ShopName`. Its current window requires both `IsActive` and `HubEnabled`, an inclusive start, and an exclusive end at snapshot-build time. Recent windows are the four newest by start time excluding the current window, with `shopName` breaking ties. Empty current rotations are valid.
