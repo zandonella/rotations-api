@@ -1,0 +1,9 @@
+*
+!src/
+!src/**
+!package.json
+!openapi.json
+!public/
+!public/docs/
+!public/docs/**
+!Dockerfile

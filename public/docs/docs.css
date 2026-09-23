@@ -1,0 +1,10 @@
+body { margin: 0; background: #fafbfc; color: #17212f; }
+.docs-header { background: #101827; color: #fff; padding: 28px 24px; }
+.docs-header-inner { align-items: center; display: flex; gap: 24px; justify-content: space-between; margin: 0 auto; max-width: 1160px; }
+.docs-brand { color: #9ed8ff; font-family: Arial, sans-serif; font-size: 14px; font-weight: 700; text-decoration: none; }
+.docs-header h1 { font-family: Arial, sans-serif; font-size: clamp(24px, 3vw, 36px); line-height: 1.2; margin: 10px 0; }
+.docs-header p { color: #d3deea; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.5; margin: 0; }
+.docs-spec-link { border: 1px solid #83caff; border-radius: 6px; color: #fff; flex: none; font-family: Arial, sans-serif; font-size: 14px; padding: 10px 14px; text-decoration: none; }
+.docs-spec-link:hover, .docs-spec-link:focus-visible { background: #203954; }
+.swagger-ui .topbar { display: none; }
+@media (max-width: 700px) { .docs-header-inner { align-items: flex-start; flex-direction: column; } }

@@ -1,0 +1,310 @@
+{
+  "openapi": "3.1.2",
+  "info": {
+    "title": "Rotations.lol public API",
+    "version": "v1",
+    "description": "Anonymous League of Legends cosmetic catalog and current rotation data. Personalized Your Shop offers are not available."
+  },
+  "servers": [{ "url": "https://api.rotations.lol" }],
+  "tags": [
+    { "name": "Rotations", "description": "Current public rotation data." },
+    { "name": "Sales", "description": "Current Catalog Sales and site sale sections." },
+    { "name": "Catalog", "description": "Public cosmetic catalog items." },
+    { "name": "Documentation", "description": "Interactive and machine-readable API documentation." },
+    { "name": "Service", "description": "Readiness and maintainer refresh operations." }
+  ],
+  "paths": {
+    "/v1/rotations": {
+      "get": {
+        "operationId": "getRotations",
+        "tags": ["Rotations"],
+        "summary": "Get every current rotation in one response.",
+        "responses": {
+          "200": { "description": "The complete current rotation snapshot.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RotationsResponse" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/v1/rotations/sales": {
+      "get": {
+        "operationId": "listSales",
+        "tags": ["Sales"],
+        "summary": "List and filter current Catalog Sales.",
+        "parameters": [
+          { "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" },
+          { "$ref": "#/components/parameters/Currency" }, { "$ref": "#/components/parameters/TypeId" },
+          { "$ref": "#/components/parameters/ChampionId" }, { "$ref": "#/components/parameters/SkinlineId" },
+          { "$ref": "#/components/parameters/Limited" }
+        ],
+        "responses": {
+          "200": { "description": "A page of active sales after all filters are applied.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SalesResponse" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/v1/rotations/sales/{section}": {
+      "get": {
+        "operationId": "listSalesBySection",
+        "tags": ["Sales"],
+        "summary": "List sales in one site section.",
+        "description": "Blue Essence includes sales with currency IP. The other four sections exclude IP. Weekly contains nonlimited skins, limited contains limited skins, chromas contains type 2 items, and other items contains item types above 2.",
+        "parameters": [
+          { "$ref": "#/components/parameters/SaleSection" },
+          { "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" },
+          { "$ref": "#/components/parameters/Currency" }, { "$ref": "#/components/parameters/TypeId" },
+          { "$ref": "#/components/parameters/ChampionId" }, { "$ref": "#/components/parameters/SkinlineId" },
+          { "$ref": "#/components/parameters/Limited" }
+        ],
+        "responses": {
+          "200": { "description": "A page of active sales in the requested section after all filters are applied.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SalesResponse" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/v1/rotations/mythic-sales": {
+      "get": {
+        "operationId": "listMythicSales",
+        "tags": ["Rotations"],
+        "summary": "List and filter current Mythic Shop offers.",
+        "parameters": [
+          { "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" },
+          { "$ref": "#/components/parameters/MythicSection" }
+        ],
+        "responses": {
+          "200": { "description": "A page of active Mythic Shop offers.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MythicSalesResponse" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/v1/rotations/your-shop": {
+      "get": {
+        "operationId": "getYourShopWindows",
+        "tags": ["Rotations"],
+        "summary": "Get the current and four recent public Your Shop windows.",
+        "responses": {
+          "200": { "description": "Public Your Shop windows without personalized offers.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/YourShopResponse" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/v1/rotations/sanctum": {
+      "get": {
+        "operationId": "listSanctumBanners",
+        "tags": ["Rotations"],
+        "summary": "List and filter current Sanctum banners.",
+        "parameters": [
+          { "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" },
+          { "$ref": "#/components/parameters/SanctumRarity" }
+        ],
+        "responses": {
+          "200": { "description": "A page of active Sanctum banners.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SanctumResponse" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/v1/items": {
+      "get": {
+        "operationId": "listItems",
+        "tags": ["Catalog"],
+        "summary": "List and filter catalog items.",
+        "parameters": [
+          { "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" },
+          { "$ref": "#/components/parameters/TypeId" }, { "$ref": "#/components/parameters/ChampionId" },
+          { "$ref": "#/components/parameters/SkinlineId" }
+        ],
+        "responses": {
+          "200": { "description": "A page of catalog items.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ItemsResponse" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/v1/items/{itemId}": {
+      "get": {
+        "operationId": "getItem",
+        "tags": ["Catalog"],
+        "summary": "Get one catalog item by its UUID.",
+        "parameters": [{ "$ref": "#/components/parameters/ItemId" }],
+        "responses": {
+          "200": { "description": "The matching catalog item.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ItemResponse" } } } },
+          "304": { "$ref": "#/components/responses/NotModified" },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "getOpenApi",
+        "tags": ["Documentation"],
+        "summary": "Get this OpenAPI description.",
+        "responses": {
+          "200": { "description": "The OpenAPI JSON document.", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/docs": {
+      "get": {
+        "operationId": "getInteractiveDocs",
+        "tags": ["Documentation"],
+        "summary": "Open interactive API documentation.",
+        "description": "The Swagger UI page shows this description and sends test requests to the host serving the page.",
+        "responses": {
+          "200": { "description": "An interactive API documentation page.", "content": { "text/html": { "schema": { "type": "string" } } } },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "tags": ["Service"],
+        "summary": "Get snapshot readiness and freshness.",
+        "responses": {
+          "200": { "description": "A valid snapshot was generated within the last 90 minutes.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthResponse" } } } },
+          "503": { "description": "No valid snapshot is loaded or its age exceeds 90 minutes.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthResponse" } } } }
+        }
+      }
+    },
+    "/internal/refresh": {
+      "post": {
+        "operationId": "requestRefresh",
+        "tags": ["Service"],
+        "summary": "Request an asynchronous public snapshot refresh.",
+        "description": "This maintainer route requires a bearer secret and an empty request body.",
+        "security": [{ "refreshSecret": [] }],
+        "responses": {
+          "202": { "description": "The refresh was accepted or coalesced.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AcceptedResponse" } } } },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "Page": { "name": "page", "in": "query", "description": "The one-based page number.", "schema": { "type": "integer", "minimum": 1, "maximum": 9007199254740991, "default": 1 } },
+      "PageSize": { "name": "pageSize", "in": "query", "description": "A positive safe integer. Values above 200 are accepted and capped at 200.", "schema": { "type": "integer", "minimum": 1, "maximum": 9007199254740991, "default": 100 } },
+      "TypeId": { "name": "typeId", "in": "query", "description": "The exact catalog item type ID.", "schema": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 } },
+      "ChampionId": { "name": "championId", "in": "query", "description": "The exact champion ID.", "schema": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 } },
+      "SkinlineId": { "name": "skinlineId", "in": "query", "description": "The exact skinline ID.", "schema": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 } },
+      "Currency": { "name": "currency", "in": "query", "description": "The sale currency. Matching is case insensitive.", "schema": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$" } },
+      "Limited": { "name": "limited", "in": "query", "description": "Whether the sale is limited.", "schema": { "type": "boolean" } },
+      "MythicSection": { "name": "section", "in": "query", "description": "The Mythic Shop section. Matching is case insensitive.", "schema": { "type": "string", "enum": ["FEATURED", "BIWEEKLY", "WEEKLY", "DAILY"] } },
+      "SanctumRarity": { "name": "rarity", "in": "query", "description": "The Sanctum rarity. Matching is case insensitive.", "schema": { "type": "string", "enum": ["EXALTED", "MYTHIC_VARIANT"] } },
+      "SaleSection": { "name": "section", "in": "path", "required": true, "description": "One sale section from the site.", "schema": { "type": "string", "enum": ["weekly", "limited", "chromas", "blue-essence", "other-items"] } },
+      "ItemId": { "name": "itemId", "in": "path", "required": true, "description": "A canonical catalog UUID. Lookup is case insensitive.", "schema": { "type": "string", "format": "uuid" } }
+    },
+    "responses": {
+      "NotModified": { "description": "The requested representation matches If-None-Match and has no body." },
+      "InvalidRequest": { "description": "A parameter or request body is invalid.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "Unauthorized": { "description": "The refresh bearer secret is missing or invalid.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "NotFound": { "description": "The requested resource does not exist.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "RateLimited": { "description": "The request limit was exceeded. Retry-After gives the seconds until reset.", "headers": { "Retry-After": { "schema": { "type": "integer", "minimum": 1 } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "Unavailable": { "description": "No usable snapshot is loaded. Retry-After is 60 seconds.", "headers": { "Retry-After": { "schema": { "type": "integer", "const": 60 } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+    },
+    "securitySchemes": {
+      "refreshSecret": { "type": "http", "scheme": "bearer", "description": "The shared API refresh secret." }
+    },
+    "schemas": {
+      "Meta": { "type": "object", "required": ["apiVersion", "generatedAt"], "properties": { "apiVersion": { "type": "string", "const": "v1" }, "generatedAt": { "type": "string", "format": "date-time" } } },
+      "Price": { "type": "object", "required": ["amount", "currency"], "properties": { "amount": { "type": "integer" }, "currency": { "type": "string" } } },
+      "Universe": { "type": "object", "required": ["id", "name"], "properties": { "id": { "type": "integer" }, "name": { "type": "string" } } },
+      "Skinline": { "type": "object", "required": ["id", "name", "universe"], "properties": { "id": { "type": "integer" }, "name": { "type": ["string", "null"] }, "universe": { "oneOf": [{ "$ref": "#/components/schemas/Universe" }, { "type": "null" }] } } },
+      "Champion": { "type": "object", "required": ["id", "slug", "name", "imageUrl"], "properties": { "id": { "type": "integer" }, "slug": { "type": "string" }, "name": { "type": "string" }, "imageUrl": { "type": "string" } } },
+      "Item": {
+        "type": "object",
+        "required": ["itemId", "riotItemId", "type", "name", "imageUrl", "parentItemId", "champion", "skinline"],
+        "properties": {
+          "itemId": { "type": "string", "format": "uuid" },
+          "riotItemId": { "type": "integer" },
+          "type": { "type": "object", "required": ["id", "name"], "properties": { "id": { "type": "integer" }, "name": { "type": "string" } } },
+          "name": { "type": "string" },
+          "imageUrl": { "type": ["string", "null"] },
+          "parentItemId": { "type": ["string", "null"], "format": "uuid" },
+          "champion": { "oneOf": [{ "$ref": "#/components/schemas/Champion" }, { "type": "null" }] },
+          "skinline": { "oneOf": [{ "$ref": "#/components/schemas/Skinline" }, { "type": "null" }] }
+        }
+      },
+      "CatalogSale": {
+        "type": "object", "required": ["saleId", "startsAt", "endsAt", "regularPrice", "salePrice", "percentOff", "limited", "item"],
+        "properties": {
+          "saleId": { "type": "string", "format": "uuid" }, "startsAt": { "type": "string", "format": "date-time" },
+          "endsAt": { "type": "string", "format": "date-time" },
+          "regularPrice": { "$ref": "#/components/schemas/Price" }, "salePrice": { "$ref": "#/components/schemas/Price" },
+          "percentOff": { "type": "number" }, "limited": { "type": "boolean" }, "item": { "$ref": "#/components/schemas/Item" }
+        }
+      },
+      "MythicOffer": {
+        "type": "object", "required": ["offerId", "startsAt", "endsAt", "section", "price", "isBundle", "bundleType", "primaryItem", "includedContentIds"],
+        "properties": {
+          "offerId": { "type": "string", "format": "uuid" }, "startsAt": { "type": "string", "format": "date-time" },
+          "endsAt": { "type": "string", "format": "date-time" },
+          "section": { "type": "string", "enum": ["FEATURED", "BIWEEKLY", "WEEKLY", "DAILY"] },
+          "price": { "$ref": "#/components/schemas/Price" }, "isBundle": { "type": "boolean" },
+          "bundleType": { "type": ["string", "null"] }, "primaryItem": { "$ref": "#/components/schemas/Item" },
+          "includedContentIds": { "type": "array", "description": "Ordered fulfillment UUIDs that do not always resolve to catalog items.", "items": { "type": "string", "format": "uuid" } }
+        }
+      },
+      "SanctumBanner": {
+        "type": "object", "required": ["bannerId", "startsAt", "endsAt", "rarity", "chasePityThreshold", "bannerImageUrl", "item"],
+        "properties": {
+          "bannerId": { "type": "string", "format": "uuid" }, "startsAt": { "type": "string", "format": "date-time" },
+          "endsAt": { "type": "string", "format": "date-time" },
+          "rarity": { "type": "string", "enum": ["EXALTED", "MYTHIC_VARIANT"] },
+          "chasePityThreshold": { "type": "integer" }, "bannerImageUrl": { "type": ["string", "null"] },
+          "item": { "$ref": "#/components/schemas/Item" }
+        }
+      },
+      "ShopWindow": { "type": "object", "required": ["shopName", "startsAt", "endsAt"], "properties": { "shopName": { "type": "string" }, "startsAt": { "type": "string", "format": "date-time" }, "endsAt": { "type": "string", "format": "date-time" } } },
+      "YourShop": { "type": "object", "required": ["currentWindow", "recentWindows"], "properties": { "currentWindow": { "oneOf": [{ "$ref": "#/components/schemas/ShopWindow" }, { "type": "null" }] }, "recentWindows": { "type": "array", "maxItems": 4, "items": { "$ref": "#/components/schemas/ShopWindow" } } } },
+      "RotationsResponse": {
+        "type": "object", "required": ["meta", "catalogSales", "mythicShop", "sanctum", "yourShop"],
+        "properties": {
+          "meta": { "$ref": "#/components/schemas/Meta" },
+          "catalogSales": { "type": "array", "items": { "$ref": "#/components/schemas/CatalogSale" } },
+          "mythicShop": { "type": "array", "items": { "$ref": "#/components/schemas/MythicOffer" } },
+          "sanctum": { "type": "array", "items": { "$ref": "#/components/schemas/SanctumBanner" } },
+          "yourShop": { "$ref": "#/components/schemas/YourShop" }
+        }
+      },
+      "Pagination": { "type": "object", "required": ["page", "pageSize", "total", "totalPages"], "properties": { "page": { "type": "integer", "minimum": 1 }, "pageSize": { "type": "integer", "minimum": 1, "maximum": 200 }, "total": { "type": "integer", "minimum": 0 }, "totalPages": { "type": "integer", "minimum": 0 } } },
+      "SalesResponse": { "allOf": [{ "$ref": "#/components/schemas/Pagination" }, { "type": "object", "required": ["meta", "catalogSales"], "properties": { "meta": { "$ref": "#/components/schemas/Meta" }, "catalogSales": { "type": "array", "items": { "$ref": "#/components/schemas/CatalogSale" } } } }] },
+      "MythicSalesResponse": { "allOf": [{ "$ref": "#/components/schemas/Pagination" }, { "type": "object", "required": ["meta", "mythicShop"], "properties": { "meta": { "$ref": "#/components/schemas/Meta" }, "mythicShop": { "type": "array", "items": { "$ref": "#/components/schemas/MythicOffer" } } } }] },
+      "SanctumResponse": { "allOf": [{ "$ref": "#/components/schemas/Pagination" }, { "type": "object", "required": ["meta", "sanctum"], "properties": { "meta": { "$ref": "#/components/schemas/Meta" }, "sanctum": { "type": "array", "items": { "$ref": "#/components/schemas/SanctumBanner" } } } }] },
+      "ItemsResponse": { "allOf": [{ "$ref": "#/components/schemas/Pagination" }, { "type": "object", "required": ["meta", "items"], "properties": { "meta": { "$ref": "#/components/schemas/Meta" }, "items": { "type": "array", "items": { "$ref": "#/components/schemas/Item" } } } }] },
+      "YourShopResponse": { "type": "object", "required": ["meta", "yourShop"], "properties": { "meta": { "$ref": "#/components/schemas/Meta" }, "yourShop": { "$ref": "#/components/schemas/YourShop" } } },
+      "ItemResponse": { "type": "object", "required": ["meta", "item"], "properties": { "meta": { "$ref": "#/components/schemas/Meta" }, "item": { "$ref": "#/components/schemas/Item" } } },
+      "HealthResponse": { "type": "object", "required": ["ok", "apiVersion", "snapshot"], "properties": { "ok": { "type": "boolean" }, "apiVersion": { "type": "string", "const": "v1" }, "snapshot": { "type": "object", "required": ["loaded", "generatedAt", "ageSeconds"], "properties": { "loaded": { "type": "boolean" }, "generatedAt": { "type": ["string", "null"], "format": "date-time" }, "ageSeconds": { "type": ["integer", "null"], "minimum": 0 } } } } },
+      "AcceptedResponse": { "type": "object", "required": ["accepted"], "properties": { "accepted": { "type": "boolean", "const": true } } },
+      "ErrorResponse": { "type": "object", "required": ["error"], "properties": { "error": { "type": "object", "required": ["code", "message"], "properties": { "code": { "type": "string" }, "message": { "type": "string" } } } } }
+    }
+  }
+}

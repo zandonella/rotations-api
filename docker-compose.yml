@@ -1,0 +1,36 @@
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    init: true
+    user: node
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    cpus: 0.50
+    mem_limit: 256m
+    pids_limit: 64
+    ports:
+      - "127.0.0.1:3003:3000"
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      API_REFRESH_SECRET: ${API_REFRESH_SECRET:-}
+      PORT: "3000"
+      DATA_DIR: /app/data
+      REFRESH_INTERVAL_MINUTES: ${REFRESH_INTERVAL_MINUTES:-30}
+      PUBLIC_RATE_LIMIT_PER_MINUTE: ${PUBLIC_RATE_LIMIT_PER_MINUTE:-60}
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+    volumes:
+      - api-data:/app/data
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    stop_grace_period: 40s
+
+volumes:
+  api-data:
