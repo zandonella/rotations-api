@@ -329,3 +329,17 @@ Compose configuration validates. Image build and container runtime verification 
 This service operates independently and is not affiliated with or endorsed by Riot Games. All game-related content, names, and assets are the property of their respective owners.
 
 Rotations.lol isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc. This includes League of Legends.
+
+## Refresh after Linux ingestion
+
+Linux ingestion can request a snapshot refresh after successfully writing to Supabase. Keep the API's scheduled refresh enabled as a fallback. A failed refresh request does not undo ingestion; the API continues serving its last valid snapshot.
+
+On the API host, add the settings from `.env.refresh.example` to the private `.env`. Set `API_REFRESH_BIND_IP` to that host's Tailscale IPv4 and generate a random `API_REFRESH_SECRET`. Deploy with both Compose files, including on future deployments:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.refresh.yml up -d --build api
+```
+
+The override retains the existing loopback ingress and adds port 3005 bound only to the configured Tailscale address. Tailnet peers can reach the existing API routes there; `/internal/refresh` requires the shared bearer secret. Tailscale encrypts this private connection. Never bind this port to a public address or `0.0.0.0`.
+
+In the ingestion host's private `.env.linux.prod`, set `ROTATIONS_API_REFRESH_URL` to `http://<api-tailscale-ip>:3005/internal/refresh` and `ROTATIONS_API_REFRESH_SECRET` to the same secret. Keep real addresses and secrets out of Git. Successful rotation and static ingestion use the existing callback. HTTP 202 means the refresh was queued; check `/health` and API logs to verify completion. Requests are limited to two per minute per source IP and overlapping refreshes are coalesced.

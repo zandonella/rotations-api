@@ -1,0 +1,5 @@
+# Optional private ingress; keep the existing loopback port from the base file.
+services:
+  api:
+    ports:
+      - "${API_REFRESH_BIND_IP:?Set API_REFRESH_BIND_IP to the VPS Tailscale IPv4}:3005:3000"
