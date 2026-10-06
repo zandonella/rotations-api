@@ -268,7 +268,7 @@ Validation rejects malformed shapes, unexpected persisted fields, invalid IDs or
 
 Use Node 24. No dependency installation is needed.
 
-1. Start local Supabase from `rotations-ingestion` using `npx supabase start`. Apply the migrations, including `20261005000000_add_public_api_state.sql` and `20261005010000_add_public_api_catalog_deltas.sql`, and populate local public data through the local workflow. A successful static or client processing run publishes the initial manifest and catalog revision through `record_public_api_state()`.
+1. Start local Supabase from `rotations-ingestion` using `npx supabase start`. Apply the migrations, including `20261005000000_add_public_api_state.sql`, `20261005010000_add_public_api_catalog_deltas.sql`, and `20261005020000_restrict_public_api_publisher.sql`, and populate local public data through the local workflow. A successful static or client processing run publishes the initial manifest and catalog revision through `record_public_api_state()`.
 2. In `rotations-api`, copy `.env.example` to `.env`. Supply the local publishable or legacy anon key and set `DATA_DIR=./data` for native development. Use a local-only secret for hint testing.
 3. Run `npm start`, then `curl -i http://127.0.0.1:3000/health`.
 4. Run `npm test`. Tests mock Supabase HTTP and need no live database or production credentials.
@@ -346,7 +346,7 @@ In the ingestion host's private `.env.linux.prod`, set `ROTATIONS_API_REFRESH_UR
 
 ## Content revision rollout
 
-Both database migrations and the ingestion publisher must be installed before this API version is deployed. Production steps require explicit owner approval. The migrations create `public_api_state`, the confirmed `public_api_catalog_item` cache, and three functions. Only the service role can call `record_public_api_state()` to publish after all public writes succeed. The API uses public read permissions for the manifest, `get_public_api_catalog_changes()` incremental reads, and `get_public_api_fingerprint()` consistency check. No Edge Function or privileged API credential is required.
+All three database migrations and the ingestion publisher must be installed before this API version is deployed. Production steps require explicit owner approval. The migrations create `public_api_state`, the confirmed `public_api_catalog_item` cache, and three functions. Explicit client-role revocations account for Supabase default function privileges. Only the service role can call `record_public_api_state()` to publish after all public writes succeed. The API uses public read permissions for the manifest, `get_public_api_catalog_changes()` incremental reads, and `get_public_api_fingerprint()` consistency check. No Edge Function or privileged API credential is required.
 
 `changed_sections` records the last update for inspection. Refresh decisions compare all five hashes, so missed checks and updates to several sections remain recoverable. The fingerprint comparison runs in Postgres and does not transfer the catalog to ingestion. A failed or missing manifest never falls back to repeated full downloads. API public requests continue reading memory.
 
