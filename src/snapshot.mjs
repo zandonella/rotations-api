@@ -13,24 +13,54 @@ const QUERIES = [
   ['YourShopSale', 'ShopName,SaleStartAt,SaleEndAt,HubEnabled,IsActive', 'SaleStartAt.desc,ShopName.asc'],
 ];
 
-export async function buildSnapshot(config) {
-  const results = await Promise.allSettled(QUERIES.map(query => readTable(config, ...query)));
+export async function buildSnapshot(config, { previous = null, changedSections = null, catalogChanges = null } = {}) {
+  const sectionFor = { CatalogSale: 'sales', MythicSale: 'mythic', SanctumSale: 'sanctum', YourShopSale: 'yourShop' };
+  const sections = new Set(changedSections ?? ['catalog', 'sales', 'mythic', 'sanctum', 'yourShop']);
+  const catalogItems = previous && catalogChanges !== null ? applyCatalogChanges(previous.items, catalogChanges)
+    : previous && !sections.has('catalog') ? previous.items : null;
+  const queries = QUERIES.filter(([table], index) => !previous ||
+    (index < 5 ? sections.has('catalog') && catalogChanges === null : sections.has(sectionFor[table])));
+  const results = await Promise.allSettled(queries.map(query => readTable(config, ...query)));
   const tables = {};
   const rowCounts = {};
+  if (catalogChanges !== null) rowCounts.catalogChanges = catalogChanges.length;
   for (let i = 0; i < results.length; i++) {
     const result = results[i];
     if (result.status === 'fulfilled') {
-      tables[QUERIES[i][0]] = result.value;
-      rowCounts[QUERIES[i][0]] = result.value.length;
+      tables[queries[i][0]] = result.value;
+      rowCounts[queries[i][0]] = result.value.length;
     }
   }
   const failure = results.find(result => result.status === 'rejected');
   if (failure) throw Object.assign(failure.reason, { rowCounts });
   try {
-    return { snapshot: createSnapshot(tables), rowCounts };
+    return { snapshot: createSnapshot(tables, new Date().toISOString(), catalogItems, previous?.rotations), rowCounts };
   } catch (error) {
     throw Object.assign(error, { rowCounts });
   }
+}
+
+function applyCatalogChanges(previous, changes) {
+  const items = new Map(previous.map(item => [item.itemId, item]));
+  for (const { item_id, item_data } of changes) {
+    if (item_data === null) items.delete(item_id);
+    else items.set(item_id, canonicalItem(item_data));
+  }
+  return [...items.values()].sort(compareItems);
+}
+
+// Postgres JSONB orders object keys differently. Preserve the API's established
+// field order so equivalent content retains its snapshot and ETags.
+function canonicalItem(item) {
+  return {
+    itemId: item.itemId, riotItemId: item.riotItemId,
+    type: { id: item.type.id, name: item.type.name }, name: item.name, imageUrl: item.imageUrl,
+    parentItemId: item.parentItemId,
+    champion: item.champion === null ? null : { id: item.champion.id, slug: item.champion.slug,
+      name: item.champion.name, imageUrl: item.champion.imageUrl },
+    skinline: item.skinline === null ? null : { id: item.skinline.id, name: item.skinline.name,
+      universe: item.skinline.universe === null ? null : { id: item.skinline.universe.id, name: item.skinline.universe.name } },
+  };
 }
 
 function id(value) {
@@ -59,19 +89,21 @@ function dates(row) {
   return { startsAt, endsAt };
 }
 
-export function createSnapshot(tables, generatedAt = new Date().toISOString()) {
-  for (const [table] of QUERIES) requireValid(Array.isArray(tables[table]), `source.${table}`);
-  const types = lookup(tables.ItemType, 'ItemType');
-  const champions = lookup(tables.Champion, 'Champion');
-  const skinlines = lookup(tables.Skinline, 'Skinline');
-  const universes = lookup(tables.Universe, 'Universe');
+export function createSnapshot(tables, generatedAt = new Date().toISOString(), catalogItems = null, previousRotations = null) {
+  for (const [table] of catalogItems === null ? QUERIES : QUERIES.slice(5)) {
+    requireValid(Array.isArray(tables[table]) || (previousRotations && QUERIES.slice(5).some(query => query[0] === table)), `source.${table}`);
+  }
   const itemById = new Map();
   const itemByInventory = new Map();
   // Older static runs stored unnamed emotes. New ingestion skips them, but
   // the existing rows remain in Supabase until they are removed separately.
-  const catalogRows = tables.CatalogItem.filter(row =>
-    !(row.ItemType === 3 && typeof row.Name === 'string' && row.Name.trim().length === 0));
-  const items = catalogRows.map(row => {
+  const catalogRows = catalogItems === null ? tables.CatalogItem.filter(row =>
+    !(row.ItemType === 3 && typeof row.Name === 'string' && row.Name.trim().length === 0)) : [];
+  const types = catalogItems === null ? lookup(tables.ItemType, 'ItemType') : null;
+  const champions = catalogItems === null ? lookup(tables.Champion, 'Champion') : null;
+  const skinlines = catalogItems === null ? lookup(tables.Skinline, 'Skinline') : null;
+  const universes = catalogItems === null ? lookup(tables.Universe, 'Universe') : null;
+  const items = catalogItems ?? catalogRows.map(row => {
     const type = resolve(types, row.ItemType, 'item.type');
     const champion = row.ChampionID === null ? null : resolve(champions, row.ChampionID, 'item.champion');
     const skinline = row.SkinlineID === null ? null : resolve(skinlines, row.SkinlineID, 'item.skinline');
@@ -89,20 +121,22 @@ export function createSnapshot(tables, generatedAt = new Date().toISOString()) {
         universe: universe === null ? null : { id: universe.id, name: universe.Name },
       },
     };
+    return item;
+  }).sort(compareItems);
+  for (const item of items) {
     requireValid(!itemById.has(item.itemId), 'source.CatalogItem.duplicate');
-    const inventoryKey = `${row.ItemType}:${row.RiotItemID}`;
+    const inventoryKey = `${item.type.id}:${item.riotItemId}`;
     requireValid(!itemByInventory.has(inventoryKey), 'source.CatalogItem.inventoryDuplicate');
     itemById.set(item.itemId, item);
     itemByInventory.set(inventoryKey, item);
-    return item;
-  }).sort(compareItems);
+  }
 
   function active(row) { requireValid(row.IsActive === true, 'source.sale.IsActive'); }
   function inventoryItem(row) {
     requireValid(Number.isSafeInteger(row.ItemType) && Number.isSafeInteger(row.RiotItemID), 'source.sale.inventoryId');
     return resolve(itemByInventory, `${row.ItemType}:${row.RiotItemID}`, 'sale.item');
   }
-  const catalogSales = tables.CatalogSale.map(row => {
+  const catalogSales = tables.CatalogSale ? tables.CatalogSale.map(row => {
     active(row);
     return {
       saleId: id(row.SaleID), ...dates(row),
@@ -110,8 +144,10 @@ export function createSnapshot(tables, generatedAt = new Date().toISOString()) {
       salePrice: { amount: row.SalePrice, currency: row.Currency },
       percentOff: row.PercentOff, limited: row.Limited, item: inventoryItem(row),
     };
-  }).sort((a, b) => compareText(a.endsAt, b.endsAt) || compareText(a.saleId, b.saleId));
-  const mythicShop = tables.MythicSale.map(row => {
+  }).sort((a, b) => compareText(a.endsAt, b.endsAt) || compareText(a.saleId, b.saleId))
+    : previousRotations.catalogSales.map(sale => ({ ...sale,
+      item: inventoryItem({ ItemType: sale.item.type.id, RiotItemID: sale.item.riotItemId }) }));
+  const mythicShop = tables.MythicSale ? tables.MythicSale.map(row => {
     active(row);
     requireValid(Array.isArray(row.IncludedItems), 'source.MythicSale.IncludedItems');
     return {
@@ -122,18 +158,22 @@ export function createSnapshot(tables, generatedAt = new Date().toISOString()) {
       // These are fulfillment content UUIDs, including possible non-catalog content.
       includedContentIds: row.IncludedItems.map(id),
     };
-  }).sort((a, b) => SECTIONS.indexOf(a.section) - SECTIONS.indexOf(b.section) || compareText(a.endsAt, b.endsAt) || compareText(a.offerId, b.offerId));
-  const sanctum = tables.SanctumSale.map(row => {
+  }).sort((a, b) => SECTIONS.indexOf(a.section) - SECTIONS.indexOf(b.section) || compareText(a.endsAt, b.endsAt) || compareText(a.offerId, b.offerId))
+    : previousRotations.mythicShop.map(offer => ({ ...offer,
+      primaryItem: resolve(itemById, offer.primaryItem.itemId, 'mythicOffer.primaryItem') }));
+  const sanctum = tables.SanctumSale ? tables.SanctumSale.map(row => {
     active(row);
     return {
       bannerId: id(row.SaleID), ...dates(row), rarity: row.Rarity,
       chasePityThreshold: row.ChasePityThreshold, bannerImageUrl: row.BannerImageURL,
       item: inventoryItem(row),
     };
-  }).sort((a, b) => RARITIES.indexOf(a.rarity) - RARITIES.indexOf(b.rarity) || compareText(a.endsAt, b.endsAt) || compareText(a.bannerId, b.bannerId));
+  }).sort((a, b) => RARITIES.indexOf(a.rarity) - RARITIES.indexOf(b.rarity) || compareText(a.endsAt, b.endsAt) || compareText(a.bannerId, b.bannerId))
+    : previousRotations.sanctum.map(banner => ({ ...banner,
+      item: inventoryItem({ ItemType: banner.item.type.id, RiotItemID: banner.item.riotItemId }) }));
 
   const shopNames = new Set();
-  const windows = tables.YourShopSale.map(row => {
+  const windows = (tables.YourShopSale ?? []).map(row => {
     requireValid(typeof row.ShopName === 'string' && row.ShopName.trim() && !shopNames.has(row.ShopName), 'source.YourShopSale.ShopName');
     requireValid(typeof row.IsActive === 'boolean' && typeof row.HubEnabled === 'boolean', 'source.YourShopSale.flags');
     shopNames.add(row.ShopName);
@@ -142,10 +182,10 @@ export function createSnapshot(tables, generatedAt = new Date().toISOString()) {
   }).sort((a, b) => compareText(b.window.startsAt, a.window.startsAt) || compareText(a.window.shopName, b.window.shopName));
   const current = windows.filter(entry => entry.current);
   requireValid(current.length <= 1, 'source.YourShopSale.multipleCurrent');
-  const yourShop = {
+  const yourShop = tables.YourShopSale ? {
     currentWindow: current[0]?.window ?? null,
     recentWindows: windows.filter(entry => !entry.current).slice(0, 4).map(entry => entry.window),
-  };
+  } : previousRotations.yourShop;
   const candidate = {
     schemaVersion: 1, generatedAt,
     rotations: { meta: { apiVersion: 'v1', generatedAt }, catalogSales, mythicShop, sanctum, yourShop },

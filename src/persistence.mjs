@@ -6,12 +6,24 @@ export async function readSnapshot(dataDir) {
   return JSON.parse(await readFile(join(dataDir, 'snapshot-v1.json'), 'utf8'));
 }
 
+export async function readSourceState(dataDir) {
+  return JSON.parse(await readFile(join(dataDir, 'snapshot-source-v1.json'), 'utf8'));
+}
+
+export async function persistSourceState(dataDir, state) {
+  return persistJson(dataDir, 'snapshot-source-v1.json', state);
+}
+
 // The caller validates the candidate before writing and swaps live state only
 // after this succeeds. Both files reside in the same directory/filesystem.
 export async function persistSnapshot(dataDir, snapshot) {
-  const json = JSON.stringify(snapshot);
+  return persistJson(dataDir, 'snapshot-v1.json', snapshot);
+}
+
+async function persistJson(dataDir, name, value) {
+  const json = JSON.stringify(value);
   await mkdir(dataDir, { recursive: true, mode: 0o700 });
-  const temporaryPath = join(dataDir, `.snapshot-v1-${randomUUID()}.tmp`);
+  const temporaryPath = join(dataDir, `.${name}-${randomUUID()}.tmp`);
   let file;
   try {
     file = await open(temporaryPath, 'wx', 0o600);
@@ -19,7 +31,7 @@ export async function persistSnapshot(dataDir, snapshot) {
     await file.sync();
     await file.close();
     file = undefined;
-    await rename(temporaryPath, join(dataDir, 'snapshot-v1.json'));
+    await rename(temporaryPath, join(dataDir, name));
   } finally {
     await file?.close();
     await unlink(temporaryPath).catch(error => {

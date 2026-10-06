@@ -284,7 +284,7 @@ test('startup without a snapshot returns safe 503 responses while failed refresh
   }
   const health = await request(server, '/health');
   assert.equal(health.status, 503);
-  assert.deepEqual(health.json, { ok: false, apiVersion: 'v1', snapshot: { loaded: false, generatedAt: null, ageSeconds: null } });
+  assert.deepEqual(health.json, { ok: false, apiVersion: 'v1', snapshot: { loaded: false, generatedAt: null, ageSeconds: null, checkedAt: null, checkAgeSeconds: null } });
 });
 
 test('health fails only beyond the 90 minute threshold and stays safe', async t => {
@@ -296,7 +296,7 @@ test('health fails only beyond the 90 minute threshold and stays safe', async t 
   now += 1;
   const stale = await request(server, '/health');
   assert.equal(stale.status, 503);
-  assert.deepEqual(stale.json, { ok: false, apiVersion: 'v1', snapshot: { loaded: true, generatedAt: snapshot.generatedAt, ageSeconds: 5400 } });
+  assert.deepEqual(stale.json, { ok: false, apiVersion: 'v1', snapshot: { loaded: true, generatedAt: snapshot.generatedAt, ageSeconds: 5400, checkedAt: snapshot.generatedAt, checkAgeSeconds: 5400 } });
   assert.equal(stale.headers['cache-control'], 'no-store');
   assert.equal(stale.headers['access-control-allow-origin'], undefined);
   assert.equal((await request(server, '/v1/rotations')).status, 200, 'Stale known-good data remains available.');

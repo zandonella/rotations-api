@@ -106,7 +106,7 @@ test('atomic swap happens only after the complete candidate is synced and rename
   assert.deepEqual(await readSnapshot(config.dataDir), store.current.snapshot);
 });
 
-test('any number of intervening hints coalesce into one serialized follow-up rebuild', async t => {
+test('intervening hints coalesce into one check without downloading unchanged data twice', async t => {
   const config = await testConfig(t);
   const store = await createSnapshotStore(config);
   t.after(() => store.close());
@@ -128,7 +128,7 @@ test('any number of intervening hints coalesce into one serialized follow-up reb
   assert.equal(store.current, null);
   release.resolve();
   await store.whenIdle();
-  assert.equal(builds, 2);
+  assert.equal(builds, 1);
   assert.ok(store.current);
 });
 
@@ -185,7 +185,8 @@ test('startup serves persisted state and fallback reschedules on wall-clock slot
     }
     return tables[table];
   });
-  let now = Date.UTC(2026, 8, 22, 12, 2);
+  const hour = Math.ceil(Date.now() / 3600_000) * 3600_000;
+  let now = hour + 2 * 60_000;
   t.mock.method(Date, 'now', () => now);
   let periodic;
   const delays = [];
@@ -201,9 +202,9 @@ test('startup serves persisted state and fallback reschedules on wall-clock slot
   release.resolve();
   await store.whenIdle();
   assert.equal(builds, 1);
-  now = Date.UTC(2026, 8, 22, 12, 5);
+  now = hour + 5 * 60_000;
   periodic();
   await store.whenIdle();
-  assert.equal(builds, 2);
+  assert.equal(builds, 1);
   assert.deepEqual(delays, [3 * 60_000, 30 * 60_000]);
 });

@@ -51,7 +51,7 @@ function price(value, path) {
   text(value.currency, `${path}.currency`);
 }
 
-function validateItem(item) {
+export function validateItem(item) {
   shape(item, ['itemId', 'riotItemId', 'type', 'name', 'imageUrl', 'parentItemId', 'champion', 'skinline'], 'item');
   uuid(item.itemId, 'item.itemId');
   integer(item.riotItemId, 'item.riotItemId');

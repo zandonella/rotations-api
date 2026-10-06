@@ -216,11 +216,14 @@ export function createApiServer(config, store) {
     if (request.method === 'GET' && path === '/health') {
       const snapshot = store.current?.snapshot;
       const ageMs = snapshot ? Math.max(0, Date.now() - Date.parse(snapshot.generatedAt)) : null;
-      const ok = ageMs !== null && ageMs <= 90 * 60_000;
+      const checkedAt = snapshot ? store.checkedAt ?? snapshot.generatedAt : null;
+      const checkAgeMs = checkedAt ? Math.max(0, Date.now() - Date.parse(checkedAt)) : null;
+      const ok = checkAgeMs !== null && checkAgeMs <= 90 * 60_000;
       json(response, ok ? 200 : 503, {
         ok, apiVersion: 'v1', snapshot: {
           loaded: Boolean(snapshot), generatedAt: snapshot?.generatedAt ?? null,
           ageSeconds: ageMs === null ? null : Math.floor(ageMs / 1000),
+          checkedAt, checkAgeSeconds: checkAgeMs === null ? null : Math.floor(checkAgeMs / 1000),
         },
       });
       return;

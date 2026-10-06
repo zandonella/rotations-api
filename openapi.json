@@ -187,8 +187,8 @@
         "tags": ["Service"],
         "summary": "Get snapshot readiness and freshness.",
         "responses": {
-          "200": { "description": "A valid snapshot was generated within the last 90 minutes.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthResponse" } } } },
-          "503": { "description": "No valid snapshot is loaded or its age exceeds 90 minutes.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthResponse" } } } }
+          "200": { "description": "A valid snapshot has a confirmed ingestion check within the last 90 minutes.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthResponse" } } } },
+          "503": { "description": "No valid snapshot is loaded or its last confirmed ingestion check exceeds 90 minutes.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthResponse" } } } }
         }
       }
     },
@@ -302,7 +302,7 @@
       "ItemsResponse": { "allOf": [{ "$ref": "#/components/schemas/Pagination" }, { "type": "object", "required": ["meta", "items"], "properties": { "meta": { "$ref": "#/components/schemas/Meta" }, "items": { "type": "array", "items": { "$ref": "#/components/schemas/Item" } } } }] },
       "YourShopResponse": { "type": "object", "required": ["meta", "yourShop"], "properties": { "meta": { "$ref": "#/components/schemas/Meta" }, "yourShop": { "$ref": "#/components/schemas/YourShop" } } },
       "ItemResponse": { "type": "object", "required": ["meta", "item"], "properties": { "meta": { "$ref": "#/components/schemas/Meta" }, "item": { "$ref": "#/components/schemas/Item" } } },
-      "HealthResponse": { "type": "object", "required": ["ok", "apiVersion", "snapshot"], "properties": { "ok": { "type": "boolean" }, "apiVersion": { "type": "string", "const": "v1" }, "snapshot": { "type": "object", "required": ["loaded", "generatedAt", "ageSeconds"], "properties": { "loaded": { "type": "boolean" }, "generatedAt": { "type": ["string", "null"], "format": "date-time" }, "ageSeconds": { "type": ["integer", "null"], "minimum": 0 } } } } },
+      "HealthResponse": { "type": "object", "required": ["ok", "apiVersion", "snapshot"], "properties": { "ok": { "type": "boolean" }, "apiVersion": { "type": "string", "const": "v1" }, "snapshot": { "type": "object", "required": ["loaded", "generatedAt", "ageSeconds", "checkedAt", "checkAgeSeconds"], "properties": { "loaded": { "type": "boolean" }, "generatedAt": { "type": ["string", "null"], "format": "date-time" }, "ageSeconds": { "type": ["integer", "null"], "minimum": 0 }, "checkedAt": { "type": ["string", "null"], "format": "date-time", "description": "The most recent successful ingestion confirmation for the cached data." }, "checkAgeSeconds": { "type": ["integer", "null"], "minimum": 0 } } } } },
       "AcceptedResponse": { "type": "object", "required": ["accepted"], "properties": { "accepted": { "type": "boolean", "const": true } } },
       "ErrorResponse": { "type": "object", "required": ["error"], "properties": { "error": { "type": "object", "required": ["code", "message"], "properties": { "code": { "type": "string" }, "message": { "type": "string" } } } } }
     }

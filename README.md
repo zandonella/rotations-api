@@ -250,25 +250,25 @@ Startup data-route 503 responses include `Retry-After: 60`. Health uses its own 
 }
 ```
 
-Health returns 200 with a valid snapshot no older than 90 minutes, including the exact threshold, and 503 otherwise. With no snapshot, `ok` and `loaded` are false and both other snapshot fields are null. Displayed age rounds down to seconds, while freshness uses milliseconds. One failed refresh does not independently affect health. Stale known-good data remains available on V1 routes even while health returns 503.
+Health returns 200 with a loaded snapshot whose last confirmed ingestion check is no older than 90 minutes, including the exact threshold, and 503 otherwise. `generatedAt` and `ageSeconds` describe the cached content. `checkedAt` and `checkAgeSeconds` describe its last confirmed ingestion check. Unchanged content can remain healthy for weeks while successful pulls keep confirming it. With no snapshot, `ok` and `loaded` are false and all timestamp and age fields are null. Displayed age rounds down to seconds, while freshness uses milliseconds. One failed refresh does not independently affect health. Stale known-good data remains available on V1 routes even while health returns 503.
 
 ## Snapshot and refresh behavior
 
-Startup validates and loads `/app/data/snapshot-v1.json`, reconstructs the item lookup map, begins serving, and starts an asynchronous refresh. Without valid persisted data, public data routes return 503 until a build succeeds. By default, fallback refreshes start at 5 and 35 minutes past each UTC hour, regardless of when the service started. Scheduling never reads ingestion heartbeat.
+Startup validates and loads `/app/data/snapshot-v1.json`, reconstructs the item lookup map, begins serving, and starts an asynchronous refresh. Without valid persisted data, public data routes return 503 until a build succeeds. By default, fallback checks start at 5 and 35 minutes past each UTC hour, regardless of when the service started. Each check reads only the singleton `public_api_state` row. Unchanged fingerprints cause no catalog or rotation queries. Scheduling never reads ingestion heartbeat.
 
-A rebuild reads all required public tables, constructs a separate candidate, validates it, writes a temporary file in the same directory, syncs and closes it, renames it over the saved snapshot, and only then swaps memory. Any failure preserves the previous live snapshot. Only one rebuild executes at a time, with one pending boolean coalescing intervening requests into a follow-up run.
+A changed section is read independently. After the initial catalog synchronization, `get_public_api_catalog_changes()` returns only added or updated public items and removal IDs since the API's saved catalog revision. Lookup changes include only affected items. The API merges these changes into its saved catalog and rebinds embedded rotation items without downloading unchanged catalog rows or lookup tables. Sales, Mythic Shop, Sanctum, and Your Shop updates each read only their corresponding table. A tiny live fingerprint check after downloading rejects data that changed during the reads. A valid candidate is saved atomically before memory swaps. Any failure preserves the previous live snapshot. Only one rebuild executes at a time, with one pending boolean coalescing intervening requests into a follow-up run.
 
-The persisted shape is `{schemaVersion: 1, generatedAt, rotations, items, snapshotId}`. Maps are never persisted. SHA-256 covers the deterministic JSON candidate without `snapshotId`, including `generatedAt`. The digest is added afterward and verified on load. Arrays have stable sorting and the builder constructs fields in a fixed order. Snapshot objects are recursively frozen in memory.
+The persisted shape is `{schemaVersion: 1, generatedAt, rotations, items, snapshotId}`. Maps are never persisted. SHA-256 covers the deterministic JSON candidate without `snapshotId`, including `generatedAt`. The digest is added afterward and verified on load. Arrays have stable sorting and the builder constructs fields in a fixed order. Snapshot objects are recursively frozen in memory. `snapshot-source-v1.json` stores the five confirmed fingerprints, catalog revision, and ingestion check time, bound to the saved snapshot digest. A missing, corrupt, or mismatched source-state file requires one complete synchronization. An older valid sidecar without a catalog revision requires one catalog synchronization while reusing unchanged rotations. A database restore that rolls the catalog revision backward also requires a catalog synchronization. Normal restarts read just the manifest and retain the catalog. If public response content is identical, generation time, snapshot ID, and ETags remain unchanged.
 
 Native fetch uses explicit columns, deterministic ordering, 500 row ranges, and a 15 second timeout. The helper checks exact `Content-Range` totals rather than relying only on short pages. This avoids silent truncation under smaller server row caps and avoids requesting a range past an exactly full last page. A changing total rejects the rebuild. Both `apikey` and the matching bearer header are sent as specified. Only public or legacy anon credentials are used.
 
-Validation rejects malformed shapes, unexpected persisted fields, invalid IDs or timestamps, duplicate identities, invalid item types or enums, unresolved required relationships, multiple current Your Shop windows, and an empty catalog replacing a nonempty catalog. Empty rotations remain valid. Separate REST reads do not form a database transaction, and unchanged row counts cannot prove an upstream multi-table transaction boundary.
+Validation rejects malformed shapes, unexpected persisted fields, invalid IDs or timestamps, duplicate identities, invalid item types or enums, unresolved required relationships, multiple current Your Shop windows, and an empty catalog replacing a nonempty catalog. Empty rotations remain valid. Separate REST reads do not form a database transaction. The post-download fingerprint must match the published manifest before the API acknowledges an update. A mismatch preserves known-good data and retries on a later hint or scheduled check.
 
 ## Local development and environment
 
 Use Node 24. No dependency installation is needed.
 
-1. Start local Supabase from `rotations-ingestion` using `npx supabase start`. Apply the existing migrations and populate local public data through the local workflow.
+1. Start local Supabase from `rotations-ingestion` using `npx supabase start`. Apply the migrations, including `20261005000000_add_public_api_state.sql` and `20261005010000_add_public_api_catalog_deltas.sql`, and populate local public data through the local workflow. A successful static or client processing run publishes the initial manifest and catalog revision through `record_public_api_state()`.
 2. In `rotations-api`, copy `.env.example` to `.env`. Supply the local publishable or legacy anon key and set `DATA_DIR=./data` for native development. Use a local-only secret for hint testing.
 3. Run `npm start`, then `curl -i http://127.0.0.1:3000/health`.
 4. Run `npm test`. Tests mock Supabase HTTP and need no live database or production credentials.
@@ -292,7 +292,7 @@ Never pass service-role, direct database, ingestion, monitoring, or Discord cred
 
 `POST /internal/refresh` requires `Authorization: Bearer <API_REFRESH_SECRET>`, with no body or query parameters. Authentication uses timing-safe comparison. Nonempty bodies, including whitespace and chunked bodies, return 400. Invalid authorization returns 401. Two accepted attempts per minute per source IP are allowed separately from the public limit.
 
-A 202 response with `{"accepted":true}` means the rebuild was accepted or coalesced. It does not wait for success. The operation grants only a public-data reread. Logs record reasons, durations, row counts, generation times, and outcomes without credentials or authentication headers.
+A 202 response with `{"accepted":true}` means a manifest check was accepted or coalesced. It downloads sections only when their confirmed fingerprints differ. It does not wait for success. The operation grants only a public manifest check and any required public section reads. Logs record reasons, durations, row counts, generation times, and outcomes without credentials or authentication headers.
 
 ```sh
 curl -i -X POST "$ROTATIONS_API_REFRESH_URL" \
@@ -322,7 +322,7 @@ Expose `/v1/`, `/health`, `/openapi.json`, and `/docs` publicly. Serve the `/doc
 
 Tests cover HTTP contracts for the combined and individual rotation routes, sale section partitioning, pagination, filters, the OpenAPI and interactive documentation routes, bundled assets, errors, persisted loading and rejection, candidate failures, atomic swaps, coalescing, ETags, 304s, both rate limiters, proxy trust, authentication, body rejection, and health freshness. Ingestion tests mock source files, Supabase, logging, and HTTP. Ingestion has no configured typecheck command, so syntax checks supplement its tests.
 
-Compose configuration validates. Image build and container runtime verification are blocked by this workstation's Docker Desktop startup failure involving its `dockerInference` socket. This is not a successful image build. No production deployment has been performed.
+Compose configuration validates. Image build and container runtime verification are blocked by this workstation's Docker Desktop startup failure involving its `dockerInference` socket. This is not a successful image build. This content revision change has not been deployed to production.
 
 ## Riot Games and League of Legends disclaimer
 
@@ -332,7 +332,7 @@ Rotations.lol isn't endorsed by Riot Games and doesn't reflect the views or opin
 
 ## Refresh after Linux ingestion
 
-Linux ingestion can request a snapshot refresh after successfully writing to Supabase. Keep the API's scheduled refresh enabled as a fallback. A failed refresh request does not undo ingestion; the API continues serving its last valid snapshot.
+Linux ingestion can request a snapshot refresh after successfully writing to Supabase. Keep the API's scheduled manifest checks enabled as a fallback. A failed refresh request does not undo ingestion; the API continues serving its last valid snapshot.
 
 On the API host, add the settings from `.env.refresh.example` to the private `.env`. Set `API_REFRESH_BIND_IP` to that host's Tailscale IPv4 and generate a random `API_REFRESH_SECRET`. Deploy with both Compose files, including on future deployments:
 
@@ -343,3 +343,11 @@ docker compose -f docker-compose.yml -f docker-compose.refresh.yml up -d --build
 The override retains the existing loopback ingress and adds port 3005 bound only to the configured Tailscale address. Tailnet peers can reach the existing API routes there; `/internal/refresh` requires the shared bearer secret. Tailscale encrypts this private connection. Never bind this port to a public address or `0.0.0.0`.
 
 In the ingestion host's private `.env.linux.prod`, set `ROTATIONS_API_REFRESH_URL` to `http://<api-tailscale-ip>:3005/internal/refresh` and `ROTATIONS_API_REFRESH_SECRET` to the same secret. Keep real addresses and secrets out of Git. Successful rotation and static ingestion use the existing callback. HTTP 202 means the refresh was queued; check `/health` and API logs to verify completion. Requests are limited to two per minute per source IP and overlapping refreshes are coalesced.
+
+## Content revision rollout
+
+Both database migrations and the ingestion publisher must be installed before this API version is deployed. Production steps require explicit owner approval. The migrations create `public_api_state`, the confirmed `public_api_catalog_item` cache, and three functions. Only the service role can call `record_public_api_state()` to publish after all public writes succeed. The API uses public read permissions for the manifest, `get_public_api_catalog_changes()` incremental reads, and `get_public_api_fingerprint()` consistency check. No Edge Function or privileged API credential is required.
+
+`changed_sections` records the last update for inspection. Refresh decisions compare all five hashes, so missed checks and updates to several sections remain recoverable. The fingerprint comparison runs in Postgres and does not transfer the catalog to ingestion. A failed or missing manifest never falls back to repeated full downloads. API public requests continue reading memory.
+
+The catalog cache stores one latest confirmed public JSON representation per item and retains a null representation for deleted items. Its storage grows with unique item IDs rather than ingestion runs. Every changed catalog publication increments `catalog_revision`, and only items whose public representation differs receive that revision. The publisher briefly locks catalog source tables against writes while calculating the hash and representations. The delta function verifies the expected published revision on every page. A superseded revision or failed delta preserves the existing snapshot and retries on the next check without a full catalog fallback. Keep the SQL item projection aligned with the public Item contract when changing its fields.
