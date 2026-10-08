@@ -1,3 +1,4 @@
+import { emailDataFromSnapshot } from './email-data.mjs';
 import http from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -176,6 +177,7 @@ async function hasEmptyBody(request) {
 export function createApiServer(config, store) {
   const publicLimiter = createRateLimiter(config.publicRateLimit);
   const internalLimiter = createRateLimiter(2);
+  const emailLimiter = createRateLimiter(30);
   const server = http.createServer({ maxHeaderSize: 8192, requestTimeout: 10_000, headersTimeout: 10_000 }, (request, response) => {
     handle(request, response).catch(error => {
       logFailure('unexpected_server_failure', error);
@@ -184,7 +186,7 @@ export function createApiServer(config, store) {
     });
   });
   server.keepAliveTimeout = 5000;
-  server.on('close', () => { publicLimiter.close(); internalLimiter.close(); });
+  server.on('close', () => { publicLimiter.close(); internalLimiter.close(); emailLimiter.close(); });
 
   function limited(limiter, request, response) {
     const result = limiter.check(clientIp(request, config.trustedProxyIps));
@@ -246,6 +248,30 @@ export function createApiServer(config, store) {
     if (request.method === 'GET' && DOCS_ASSETS.has(path)) {
       if (url.search) return errorResponse(response, 400);
       return docsAssetResponse(request, response, DOCS_ASSETS.get(path));
+    }
+
+    if (request.method === 'POST' && path === '/internal/email-data') {
+      if (!authorized(request, config.refreshSecret)) return errorResponse(response, 401);
+      if (url.search || limited(emailLimiter, request, response)) {
+        if (url.search) errorResponse(response, 400);
+        return;
+      }
+      let size = 0;
+      const chunks = [];
+      for await (const chunk of request) {
+        size += chunk.length;
+        if (size > 65536) {
+          json(response, 413, { error: 'Email data request too large.' });
+          return;
+        }
+        chunks.push(chunk);
+      }
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        return json(response, 200, emailDataFromSnapshot(store, body));
+      } catch (error) {
+        return json(response, error.status ?? 400, { error: 'Email cache unavailable or invalid request.' });
+      }
     }
 
     if (request.method === 'POST' && path === '/internal/refresh') {

@@ -31,7 +31,7 @@ export function readConfig(env = process.env) {
     refreshSecret: env.API_REFRESH_SECRET || '',
     port: integer('PORT', 3000, 65535),
     dataDir: resolve(env.DATA_DIR || '/app/data'),
-    refreshIntervalMs: integer('REFRESH_INTERVAL_MINUTES', 30, 35791) * 60_000,
+    refreshIntervalMs: integer('REFRESH_INTERVAL_MINUTES', 60, 35791) * 60_000,
     publicRateLimit: integer('PUBLIC_RATE_LIMIT_PER_MINUTE', 60),
     trustedProxyIps: Object.freeze(trustedProxyIps),
   });

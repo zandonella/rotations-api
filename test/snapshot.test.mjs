@@ -144,7 +144,7 @@ test('never replaces a nonempty catalog with an empty catalog', () => {
 
 test('config uses safe defaults and rejects invalid values and privileged keys', () => {
   const defaults = readConfig({});
-  assert.equal(defaults.refreshIntervalMs, 30 * 60_000);
+  assert.equal(defaults.refreshIntervalMs, 60 * 60_000);
   assert.equal(defaults.publicRateLimit, 60);
   assert.deepEqual(defaults.trustedProxyIps, []);
   for (const env of [

@@ -254,7 +254,7 @@ Health returns 200 with a loaded snapshot whose last confirmed ingestion check i
 
 ## Snapshot and refresh behavior
 
-Startup validates and loads `/app/data/snapshot-v1.json`, reconstructs the item lookup map, begins serving, and starts an asynchronous refresh. Without valid persisted data, public data routes return 503 until a build succeeds. By default, fallback checks start at 5 and 35 minutes past each UTC hour, regardless of when the service started. Each check reads only the singleton `public_api_state` row. Unchanged fingerprints cause no catalog or rotation queries. Scheduling never reads ingestion heartbeat.
+Startup validates and loads `/app/data/snapshot-v1.json`, reconstructs the item lookup map, begins serving, and starts an asynchronous refresh. Without valid persisted data, public data routes return 503 until a build succeeds. By default, fallback checks start at 5 minutes past each UTC hour, regardless of when the service started. Each check reads only the singleton `public_api_state` row. Unchanged fingerprints cause no catalog or rotation queries. Scheduling never reads ingestion heartbeat.
 
 A changed section is read independently. After the initial catalog synchronization, `get_public_api_catalog_changes()` returns only added or updated public items and removal IDs since the API's saved catalog revision. Lookup changes include only affected items. The API merges these changes into its saved catalog and rebinds embedded rotation items without downloading unchanged catalog rows or lookup tables. Sales, Mythic Shop, Sanctum, and Your Shop updates each read only their corresponding table. A tiny live fingerprint check after downloading rejects data that changed during the reads. A valid candidate is saved atomically before memory swaps. Any failure preserves the previous live snapshot. Only one rebuild executes at a time, with one pending boolean coalescing intervening requests into a follow-up run.
 
@@ -282,7 +282,7 @@ The native server listens on `0.0.0.0`. Missing database credentials allow safe 
 | `API_REFRESH_SECRET` | Empty. | Shared refresh bearer secret. Empty disables hints. |
 | `PORT` | `3000` | Native HTTP port. Compose fixes container port 3000. |
 | `DATA_DIR` | `/app/data` | Snapshot directory. Compose fixes the writable volume path. |
-| `REFRESH_INTERVAL_MINUTES` | `30` | Positive integer, at most 35791 minutes to fit Node timers. The default runs at `:05` and `:35` UTC. Other intervals repeat from the same fixed UTC anchor, independent of service startup time. |
+| `REFRESH_INTERVAL_MINUTES` | `60` | Positive integer, at most 35791 minutes to fit Node timers. The default runs at `:05` UTC. Other intervals repeat from the same fixed UTC anchor, independent of service startup time. |
 | `PUBLIC_RATE_LIMIT_PER_MINUTE` | `60` | Positive safe integer public request limit. |
 | `TRUSTED_PROXY_IPS` | Empty. | Comma-separated exact TCP peer IPs. No CIDR ranges. |
 
@@ -351,3 +351,17 @@ All three database migrations and the ingestion publisher must be installed befo
 `changed_sections` records the last update for inspection. Refresh decisions compare all five hashes, so missed checks and updates to several sections remain recoverable. The fingerprint comparison runs in Postgres and does not transfer the catalog to ingestion. A failed or missing manifest never falls back to repeated full downloads. API public requests continue reading memory.
 
 The catalog cache stores one latest confirmed public JSON representation per item and retains a null representation for deleted items. Its storage grows with unique item IDs rather than ingestion runs. Every changed catalog publication increments `catalog_revision`, and only items whose public representation differs receive that revision. The publisher briefly locks catalog source tables against writes while calculating the hash and representations. The delta function verifies the expected published revision on every page. A superseded revision or failed delta preserves the existing snapshot and retries on the next check without a full catalog fallback. Keep the SQL item projection aligned with the public Item contract when changing its fields.
+
+
+### Private email rendering cache
+
+`POST /internal/email-data` uses the same bearer secret and private ingress as
+`/internal/refresh`, with a separate 30-request/minute limit. Send JSON
+`{ "minCheckedAt": "<ingestion startedAt>", "records": [...] }`; each record has
+`ItemID`, `SaleID`, `SaleType`, and, for Mythic offers, `OfferID`. Up to 500 records
+and 64 KiB are accepted. A cache whose confirmed source `checkedAt` predates the
+completed ingestion's start returns 409. Otherwise the response contains
+`checkedAt` and only requested item/sale rendering fields available in memory.
+Missing items are omitted for narrow worker-side fallbacks. No profile, wishlist,
+recipient, or delivery data enters this endpoint. Responses are `no-store`, have
+no public CORS, and never read Supabase on demand. Keep this route private.
