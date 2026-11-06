@@ -1,6 +1,6 @@
 # Public API reference
 
-The Rotations.lol V1 API provides the public League of Legends cosmetic catalog, Catalog Sales, Mythic Shop offers, Sanctum banners, and Your Shop windows. The intended base URL is `https://api.rotations.lol`. Public use is free and anonymous, with no API key or account required.
+The Rotations.lol V1 API provides the public League of Legends cosmetic catalog, Catalog Sales, Mythic Shop offers, Sanctum banners, and Your Shop windows. The public base URL is `https://api.rotations.lol`. Public use is free and anonymous, with no API key or account required.
 
 This independent Node service has no runtime dependencies. Public requests read one immutable in-memory snapshot. Only refreshes read public Supabase tables. Personalized Your Shop discounts, accounts, wishlists, operational data, and history endpoints are outside V1.
 
@@ -210,7 +210,7 @@ Public V1 OPTIONS requests return 204 and allow GET, OPTIONS, and `If-None-Match
 
 ## Errors and health
 
-Application errors use this envelope with the exact code and message from the table.
+Public route and refresh-hint errors use this envelope with the exact code and message from the table. The private email rendering endpoint uses the separate errors described below.
 
 ```json
 {
@@ -239,7 +239,9 @@ Startup data-route 503 responses include `Retry-After: 60`. Health uses its own 
   "snapshot": {
     "loaded": true,
     "generatedAt": "2026-09-22T14:30:02.183Z",
-    "ageSeconds": 412
+    "ageSeconds": 412,
+    "checkedAt": "2026-09-22T14:30:02.183Z",
+    "checkAgeSeconds": 412
   }
 }
 ```
@@ -293,7 +295,7 @@ curl -i -X POST "$ROTATIONS_API_REFRESH_URL" \
   -H "Authorization: Bearer $ROTATIONS_API_REFRESH_SECRET"
 ```
 
-In ingestion, configure `ROTATIONS_API_REFRESH_URL` and `ROTATIONS_API_REFRESH_SECRET` only when the API is reachable. The shared helper uses native fetch, a five second timeout, and no redirects. Failures are sanitized warnings. Live ingestion hints once after explicit successful public-data work, before Pi scheduling and heartbeat. Partial processing suppresses the hint. Static ingestion hints once after every lookup and catalog upsert succeeds.
+In ingestion, configure `ROTATIONS_API_REFRESH_URL` and `ROTATIONS_API_REFRESH_SECRET` only when the API is reachable. The shared helper uses native fetch, a five second timeout, and no redirects. Failures are sanitized warnings. Live ingestion hints once after explicit successful public-data work, before heartbeat and any Windows wake scheduling. Partial processing suppresses the hint. Static ingestion hints after every lookup and catalog upsert succeeds. Linux sends configured hints after complete successful ingestion even when content is unchanged, allowing the API to confirm freshness. Windows skips hints when the published content is unchanged.
 
 ## Container and deployment
 
@@ -310,7 +312,7 @@ Compose maps `127.0.0.1:3003:3000`. Configure `api.rotations.lol` DNS and TLS th
 
 The proxy must overwrite `X-Real-IP` with the client connection address it observed. Configure only the API's exact immediate TCP peers in `TRUSTED_PROXY_IPS`. Docker may present a bridge address, and dual-stack sockets may use IPv4-mapped IPv6. Verify the actual peer on the host rather than guessing. The API ignores forwarded identities from other peers and always ignores `X-Forwarded-For`.
 
-Expose `/v1/`, `/health`, `/openapi.json`, and `/docs` publicly. Serve the `/docs/` asset paths through the same proxy. Prefer a separate private or Tailscale ingress for `/internal/refresh` and exclude it from the public virtual host. Verify the ingestion PC's route to the VPS. If private routing is unavailable, configure a public HTTPS refresh path protected by the shared secret and an ingress IP restriction where feasible.
+Expose `/v1/`, `/health`, `/openapi.json`, and `/docs` publicly. Serve the `/docs/` asset paths through the same proxy. Use a separate private or Tailscale ingress for `/internal/refresh` and `/internal/email-data`, and exclude both from the public virtual host. Verify the ingestion host's route to the API. For HTTPS refresh hints outside a tailnet, protect the refresh path with the shared secret and an ingress IP restriction.
 
 ## Testing
 
@@ -355,5 +357,5 @@ and 64 KiB are accepted. A cache whose confirmed source `checkedAt` predates the
 completed ingestion's start returns 409. Otherwise the response contains
 `checkedAt` and only requested item/sale rendering fields available in memory.
 Missing items are omitted for narrow worker-side fallbacks. No profile, wishlist,
-recipient, or delivery data enters this endpoint. Responses are `no-store`, have
-no public CORS, and never read Supabase on demand. Keep this route private.
+recipient address, or delivery status enters this endpoint. It accepts the requested item and sale identifiers to locate public rendering fields. Responses are `no-store`, have
+no public CORS, and never read Supabase on demand. Invalid rendering requests return 400, an unconfirmed cache returns 409, and bodies above 64 KiB return 413. These endpoint errors use an `error` string. Authentication and rate-limit failures use the shared error envelope. Keep this route private.
